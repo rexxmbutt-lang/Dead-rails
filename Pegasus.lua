@@ -4,18 +4,21 @@
 --  Library   : github.com/rexxmbutt-lang/Libraary-script-roblox
 -- ═══════════════════════════════════════════════════════
 
--- ── Load Library ──────────────────────────────────────
-local Lib = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/rexxmbutt-lang/Libraary-script-roblox/refs/heads/main/library.luau"
-))()
+-- ── Load Library (hanya untuk Notify) ────────────────
+local LibOk, Lib = pcall(function()
+    return loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/rexxmbutt-lang/Libraary-script-roblox/refs/heads/main/library.luau"
+    ))()
+end)
+if not LibOk then Lib = nil end
 
--- ── Services & locals ────────────────────────────────
-local Players         = game:GetService("Players")
-local RunService      = game:GetService("RunService")
-local UserInputService= game:GetService("UserInputService")
-local TweenService    = game:GetService("TweenService")
-local Workspace       = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- ── Services ─────────────────────────────────────────
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local Workspace        = game:GetService("Workspace")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
 
 local lp   = Players.LocalPlayer
 local char = lp.Character or lp.CharacterAdded:Wait()
@@ -28,18 +31,18 @@ lp.CharacterAdded:Connect(function(c)
     hrp  = c:WaitForChild("HumanoidRootPart")
 end)
 
--- ── State ─────────────────────────────────────────────
+-- ── State flags ───────────────────────────────────────
 local F = {
-    AutoBonds    = false,
-    BringItems   = false,
-    AutoEscape   = false,
-    AutoDrive    = false,
-    SpeedBoost   = false,
-    Fly          = false,
-    ESPBonds     = false,
-    ESPZombie    = false,
-    ESPWerewolf  = false,
-    ESPCowboy    = false,
+    AutoBonds   = false,
+    BringItems  = false,
+    AutoEscape  = false,
+    AutoDrive   = false,
+    SpeedBoost  = false,
+    Fly         = false,
+    ESPBonds    = false,
+    ESPZombie   = false,
+    ESPWerewolf = false,
+    ESPCowboy   = false,
 }
 
 local DEFAULT_SPEED = 16
@@ -47,65 +50,65 @@ local BOOST_SPEED   = 80
 local FLY_SPEED     = 60
 local ESP_COLOR     = Color3.fromRGB(255, 0, 0)
 
--- ── Helpers ───────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════
+--  HELPERS
+-- ═══════════════════════════════════════════════════════
 local function getAll()
     local ok, r = pcall(function() return Workspace:GetDescendants() end)
     return ok and r or {}
 end
 
 -- ═══════════════════════════════════════════════════════
---  MAIN FEATURES
+--  FEATURES
 -- ═══════════════════════════════════════════════════════
 
--- Auto Bonds: collect semua currency di map
+-- Auto Bonds
 local function tickBonds()
     local origin = hrp.CFrame
     for _, v in ipairs(getAll()) do
         local n = v.Name:lower()
-        if (n:find("bond") or n:find("gold") or n:find("coin") or n:find("cash"))
-            and (v:IsA("BasePart") or v:IsA("Model")) then
-            local part = v:IsA("Model") and v.PrimaryPart or v
-            if part then
-                pcall(function()
-                    hrp.CFrame = part.CFrame + Vector3.new(0, 2, 0)
-                end)
-                task.wait(0.04)
+        if n:find("bond") or n:find("gold") or n:find("coin") or n:find("cash") then
+            if v:IsA("BasePart") or v:IsA("Model") then
+                local part = v:IsA("Model") and v.PrimaryPart or v
+                if part then
+                    pcall(function() hrp.CFrame = part.CFrame + Vector3.new(0,2,0) end)
+                    task.wait(0.04)
+                end
             end
         end
     end
     hrp.CFrame = origin
 end
 
--- Bring All Items: lempar item ke player
+-- Bring All Items
 local function tickBring()
     for _, v in ipairs(getAll()) do
         if v:IsA("BasePart") and not v.Anchored and v.CanCollide == false then
             pcall(function()
-                v.CFrame = hrp.CFrame
-                    + Vector3.new(math.random(-3,3), 1, math.random(-3,3))
+                v.CFrame = hrp.CFrame + Vector3.new(math.random(-3,3),1,math.random(-3,3))
             end)
         end
     end
 end
 
--- Auto Escape: fire semua remote event win condition
+-- Auto Escape
 local WIN_REMOTES = {
     "EscapeGame","WinGame","TrainEscaped","Escaped",
     "Victory","FinishGame","GameWin","CompleteGame"
 }
 local function doEscape()
     for _, name in ipairs(WIN_REMOTES) do
-        local r = ReplicatedStorage:FindFirstChild(name, true)
-                  or Workspace:FindFirstChild(name, true)
+        local r = ReplicatedStorage:FindFirstChild(name,true)
+                  or Workspace:FindFirstChild(name,true)
         if r then
-            if r:IsA("RemoteEvent") then pcall(function() r:FireServer() end) end
+            if r:IsA("RemoteEvent")    then pcall(function() r:FireServer()   end) end
             if r:IsA("RemoteFunction") then pcall(function() r:InvokeServer() end) end
         end
     end
     F.AutoEscape = false
 end
 
--- Auto Drive: duduk di seat kereta, throttle max
+-- Auto Drive
 local driveConn = nil
 local function startDrive()
     for _, v in ipairs(getAll()) do
@@ -114,8 +117,9 @@ local function startDrive()
             if n:find("driver") or n:find("cabin") or n:find("front") or n:find("seat") then
                 pcall(function() v:Sit(hum) end)
                 if v:IsA("VehicleSeat") then
+                    if driveConn then driveConn:Disconnect() end
                     driveConn = RunService.Heartbeat:Connect(function()
-                        if not F.AutoDrive then driveConn:Disconnect() return end
+                        if not F.AutoDrive then driveConn:Disconnect() driveConn=nil return end
                         v.Throttle = 1
                         v.Steer    = 0
                     end)
@@ -137,19 +141,19 @@ end
 local flyBV, flyBG, flyConn = nil, nil, nil
 local function startFly()
     if flyBV then return end
-    flyBV = Instance.new("BodyVelocity")
-    flyBV.Velocity  = Vector3.zero
-    flyBV.MaxForce  = Vector3.new(1e5,1e5,1e5)
-    flyBV.Parent    = hrp
-    flyBG = Instance.new("BodyGyro")
-    flyBG.MaxTorque = Vector3.new(1e5,1e5,1e5)
-    flyBG.D         = 100
-    flyBG.Parent    = hrp
+    flyBV          = Instance.new("BodyVelocity")
+    flyBV.Velocity = Vector3.zero
+    flyBV.MaxForce = Vector3.new(1e5,1e5,1e5)
+    flyBV.Parent   = hrp
+    flyBG          = Instance.new("BodyGyro")
+    flyBG.MaxTorque= Vector3.new(1e5,1e5,1e5)
+    flyBG.D        = 100
+    flyBG.Parent   = hrp
     flyConn = RunService.RenderStepped:Connect(function()
         if not F.Fly then
-            if flyBV then flyBV:Destroy() flyBV = nil end
-            if flyBG then flyBG:Destroy() flyBG = nil end
-            flyConn:Disconnect() flyConn = nil
+            if flyBV then flyBV:Destroy() flyBV=nil end
+            if flyBG then flyBG:Destroy() flyBG=nil end
+            flyConn:Disconnect() flyConn=nil
             return
         end
         local cam = Workspace.CurrentCamera
@@ -167,22 +171,22 @@ local function startFly()
 end
 local function stopFly()
     F.Fly = false
-    if flyBV then flyBV:Destroy() flyBV = nil end
-    if flyBG then flyBG:Destroy() flyBG = nil end
-    if flyConn then flyConn:Disconnect() flyConn = nil end
+    if flyBV  then flyBV:Destroy()       flyBV=nil  end
+    if flyBG  then flyBG:Destroy()       flyBG=nil  end
+    if flyConn then flyConn:Disconnect() flyConn=nil end
     pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
 end
 
 -- ═══════════════════════════════════════════════════════
---  ESP (DrawingLib — box merah)
+--  ESP — DrawingLib box merah
 -- ═══════════════════════════════════════════════════════
-local espData = {} -- [model] = { box={L,L,L,L}, lbl }
+local espData = {}
 
-local function espTagMatch(v)
+local function espTag(v)
     local n = v.Name:lower()
     if F.ESPBonds    and (n:find("bond") or n:find("gold") or n:find("coin")) then return "BOND"     end
-    if F.ESPZombie   and n:find("zombie")   then return "ZOMBIE"   end
-    if F.ESPWerewolf and n:find("werewolf") then return "WEREWOLF" end
+    if F.ESPZombie   and  n:find("zombie")                                     then return "ZOMBIE"   end
+    if F.ESPWerewolf and  n:find("werewolf")                                   then return "WEREWOLF" end
     if F.ESPCowboy   and (n:find("cowboy") or n:find("outlaw") or n:find("bandit")) then return "COWBOY" end
     return nil
 end
@@ -198,8 +202,7 @@ local function newBox()
     end
     return t
 end
-
-local function newLabel()
+local function newLbl()
     local l = Drawing.new("Text")
     l.Color   = ESP_COLOR
     l.Size    = 13
@@ -207,565 +210,587 @@ local function newLabel()
     l.Visible = false
     return l
 end
-
 local function destroyEntry(e)
     if not e then return end
     for _, l in ipairs(e.box) do pcall(function() l:Remove() end) end
     if e.lbl then pcall(function() e.lbl:Remove() end) end
 end
-
 local function w2s(pos)
-    local cam = Workspace.CurrentCamera
-    local sp, vis = cam:WorldToViewportPoint(pos)
+    local sp, vis = Workspace.CurrentCamera:WorldToViewportPoint(pos)
     return Vector2.new(sp.X, sp.Y), sp.Z > 0 and vis
 end
-
 local function drawBox(lines, tl, br)
-    local x0,y0 = tl.X, tl.Y
-    local x1,y1 = br.X, br.Y
-    lines[1].From=Vector2.new(x0,y0) lines[1].To=Vector2.new(x1,y0) -- top
-    lines[2].From=Vector2.new(x0,y1) lines[2].To=Vector2.new(x1,y1) -- bottom
-    lines[3].From=Vector2.new(x0,y0) lines[3].To=Vector2.new(x0,y1) -- left
-    lines[4].From=Vector2.new(x1,y0) lines[4].To=Vector2.new(x1,y1) -- right
-    for _,l in ipairs(lines) do l.Visible = true end
+    local x0,y0,x1,y1 = tl.X,tl.Y,br.X,br.Y
+    lines[1].From=Vector2.new(x0,y0) lines[1].To=Vector2.new(x1,y0)
+    lines[2].From=Vector2.new(x0,y1) lines[2].To=Vector2.new(x1,y1)
+    lines[3].From=Vector2.new(x0,y0) lines[3].To=Vector2.new(x0,y1)
+    lines[4].From=Vector2.new(x1,y0) lines[4].To=Vector2.new(x1,y1)
+    for _,l in ipairs(lines) do l.Visible=true end
 end
-
 local function hideBox(lines)
-    for _,l in ipairs(lines) do l.Visible = false end
+    for _,l in ipairs(lines) do l.Visible=false end
 end
 
 RunService.RenderStepped:Connect(function()
     local anyESP = F.ESPBonds or F.ESPZombie or F.ESPWerewolf or F.ESPCowboy
-    for model, e in pairs(espData) do
-        if not model or not model.Parent then
-            destroyEntry(e)
-            espData[model] = nil
-        end
+    for mdl, e in pairs(espData) do
+        if not mdl or not mdl.Parent then destroyEntry(e) espData[mdl]=nil end
     end
     if not anyESP then
-        for m, e in pairs(espData) do destroyEntry(e) espData[m] = nil end
+        for m,e in pairs(espData) do destroyEntry(e) espData[m]=nil end
         return
     end
-
     local seen = {}
     for _, v in ipairs(getAll()) do
-        local tag = espTagMatch(v)
+        local tag = espTag(v)
         if tag then
-            local mdl = v:IsA("Model") and v or v.Parent
+            local mdl = v:IsA("Model") and v or (v.Parent and v.Parent:IsA("Model") and v.Parent or nil)
             if mdl and not seen[mdl] then
                 seen[mdl] = true
-                if not espData[mdl] then
-                    espData[mdl] = { box = newBox(), lbl = newLabel() }
-                end
-                local e = espData[mdl]
+                if not espData[mdl] then espData[mdl]={box=newBox(),lbl=newLbl()} end
+                local e   = espData[mdl]
                 local ok, bbcf, bbs = pcall(function() return mdl:GetBoundingBox() end)
                 if ok and bbcf and bbs then
                     local top    = bbcf.Position + Vector3.new(0, bbs.Y/2, 0)
                     local bottom = bbcf.Position - Vector3.new(0, bbs.Y/2, 0)
-                    local tsp, tv = w2s(top)
-                    local bsp, bv = w2s(bottom)
+                    local tsp,tv = w2s(top)
+                    local bsp,bv = w2s(bottom)
                     if tv or bv then
-                        local h = math.abs(tsp.Y - bsp.Y)
-                        local w = h * 0.6
-                        local tl = Vector2.new(tsp.X - w/2, math.min(tsp.Y, bsp.Y))
-                        local br = tl + Vector2.new(w, h)
-                        drawBox(e.box, tl, br)
-                        local dist = math.floor((bbcf.Position - hrp.Position).Magnitude)
+                        local h  = math.abs(tsp.Y - bsp.Y)
+                        local w  = h * 0.55
+                        local tl = Vector2.new(tsp.X-w/2, math.min(tsp.Y,bsp.Y))
+                        drawBox(e.box, tl, tl+Vector2.new(w,h))
+                        local dist = math.floor((bbcf.Position-hrp.Position).Magnitude)
                         e.lbl.Text     = string.format("[%s] %s | %dm", tag, mdl.Name, dist)
-                        e.lbl.Position = Vector2.new(tl.X, tl.Y - 16)
+                        e.lbl.Position = Vector2.new(tl.X, tl.Y-16)
                         e.lbl.Visible  = true
                     else
-                        hideBox(e.box) e.lbl.Visible = false
+                        hideBox(e.box) e.lbl.Visible=false
                     end
                 else
-                    hideBox(e.box) e.lbl.Visible = false
+                    hideBox(e.box) e.lbl.Visible=false
                 end
             end
         end
     end
-    for m, e in pairs(espData) do
-        if not seen[m] then hideBox(e.box) e.lbl.Visible = false end
+    for m,e in pairs(espData) do
+        if not seen[m] then hideBox(e.box) e.lbl.Visible=false end
     end
 end)
 
--- ── Main loop (bonds, bring, escape) ─────────────────
+-- ── Main loop ─────────────────────────────────────────
 task.spawn(function()
     while task.wait(0.5) do
-        if F.AutoBonds   then pcall(tickBonds)  end
-        if F.BringItems  then pcall(tickBring)  end
-        if F.AutoEscape  then pcall(doEscape)   end
+        if F.AutoBonds  then pcall(tickBonds) end
+        if F.BringItems then pcall(tickBring) end
+        if F.AutoEscape then pcall(doEscape)  end
     end
 end)
 
 -- ═══════════════════════════════════════════════════════
---  UI  (Rexxzy_Library native — Custom primitives)
+--  UI — 100% Roblox Instance primitif, zero _Custom
 -- ═══════════════════════════════════════════════════════
-local Custom = Lib._Custom or (function()
-    -- Rexxzy_Library expose Custom via upvalue; fallback kalau nil
-    local ok, m = pcall(loadstring, game:HttpGet(
-        "https://raw.githubusercontent.com/rexxmbutt-lang/Libraary-script-roblox/refs/heads/main/library.luau"
-    ))
-    return ok and m and m._Custom or nil
-end)()
-
--- GuiParent
-local function getGui()
-    if gethui then local ok,r = pcall(gethui) if ok and r then return r end end
+local function getGuiParent()
+    if gethui then local ok,r=pcall(gethui) if ok and r then return r end end
     if cloneref then
-        local ok,r = pcall(function() return cloneref(game:GetService("CoreGui")) end)
+        local ok,r=pcall(function() return cloneref(game:GetService("CoreGui")) end)
         if ok and r then return r end
     end
     return game:GetService("CoreGui")
 end
 
--- ── Colour palette (matches library's Theme) ─────────
-local T = {
-    Dark      = Color3.fromRGB(4,4,5),
-    Panel     = Color3.fromRGB(14,14,17),
-    Field     = Color3.fromRGB(22,22,27),
-    Text      = Color3.fromRGB(245,245,247),
-    Sub       = Color3.fromRGB(155,155,162),
-    Border    = Color3.fromRGB(76,76,83),
-    Accent    = Color3.fromRGB(245,245,247),
-    Off       = Color3.fromRGB(36,36,41),
-    Hover     = Color3.fromRGB(28,28,33),
-    Red       = Color3.fromRGB(220,60,60),
-    White     = Color3.fromRGB(238,238,242),
-    Toggle_On = Color3.fromRGB(80,200,120),
-}
-
-local function new(cls, props, parent)
-    local i = Instance.new(cls)
-    for k,v in pairs(props) do i[k] = v end
-    if parent then i.Parent = parent end
-    return i
-end
-local function corner(inst, r)
-    return new("UICorner",{CornerRadius=UDim.new(0,r or 8)},inst)
-end
-local function stroke(inst, col, trans, thick)
-    return new("UIStroke",{
-        Color=col or T.White, Transparency=trans or 0.72,
-        Thickness=thick or 1, ApplyStrokeMode=Enum.ApplyStrokeMode.Border
-    },inst)
-end
-local function tween(obj,t,props)
-    TweenService:Create(obj,TweenInfo.new(t,Enum.EasingStyle.Quad),props):Play()
-end
-local function label(parent, text, size, color, xa)
-    return new("TextLabel",{
-        Text=text, TextSize=size or 12,
-        TextColor3=color or T.Text,
-        Font=Enum.Font.GothamBold,
-        BackgroundTransparency=1,
-        BorderSizePixel=0,
-        TextXAlignment=xa or Enum.TextXAlignment.Left,
-        TextTruncate=Enum.TextTruncate.AtEnd,
-        Size=UDim2.new(1,0,1,0),
-    }, parent)
-end
-
--- ── Notify helper ─────────────────────────────────────
+-- Notify wrapper
 local function notify(msg, dur)
-    if Lib and Lib.Notify then
-        pcall(function() Lib:Notify({ Title="Pegasus Hub", Content=msg, Duration=dur or 3 }) end)
+    if Lib and type(Lib)=="table" and Lib.Notify then
+        pcall(function() Lib:Notify({Title="Pegasus Hub",Content=msg,Duration=dur or 3}) end)
     end
 end
 
--- ══════════════════════════════════════════════════════
---  ROOT GUI
--- ══════════════════════════════════════════════════════
-local GuiParent = getGui()
-local ScreenGui = new("ScreenGui",{
+-- ── Colour palette ────────────────────────────────────
+local C = {
+    BG       = Color3.fromRGB(10,10,13),
+    Panel    = Color3.fromRGB(18,18,22),
+    Field    = Color3.fromRGB(24,24,30),
+    Hover    = Color3.fromRGB(30,30,38),
+    Text     = Color3.fromRGB(240,240,245),
+    Sub      = Color3.fromRGB(140,140,150),
+    Border   = Color3.fromRGB(55,55,68),
+    TglOn    = Color3.fromRGB(72,187,120),
+    TglOff   = Color3.fromRGB(44,44,55),
+    White    = Color3.fromRGB(255,255,255),
+    Discord  = Color3.fromRGB(88,101,242),
+    DiscHov  = Color3.fromRGB(108,121,255),
+}
+
+-- ── Instance helpers ─────────────────────────────────
+local function N(cls, props, parent)
+    local i = Instance.new(cls)
+    for k,v in pairs(props) do
+        pcall(function() i[k]=v end)
+    end
+    if parent then i.Parent=parent end
+    return i
+end
+local function corner(inst,r)
+    return N("UICorner",{CornerRadius=UDim.new(0,r or 8)},inst)
+end
+local function uistroke(inst,col,trans,thick)
+    return N("UIStroke",{
+        Color=col or C.Border,
+        Transparency=trans or 0.5,
+        Thickness=thick or 1,
+        ApplyStrokeMode=Enum.ApplyStrokeMode.Border,
+    },inst)
+end
+local function tw(obj,t,props)
+    TweenService:Create(obj,TweenInfo.new(t,Enum.EasingStyle.Quad),props):Play()
+end
+
+-- ── Root ScreenGui ───────────────────────────────────
+local SG = N("ScreenGui",{
     Name="PegasusHub",
     ResetOnSpawn=false,
     ZIndexBehavior=Enum.ZIndexBehavior.Sibling,
-}, GuiParent)
+    DisplayOrder=999,
+}, getGuiParent())
 
--- Main window frame
-local WIN_W, WIN_H = 400, 500
-local Window = new("Frame",{
-    Size=UDim2.new(0,WIN_W,0,WIN_H),
-    Position=UDim2.new(0.5,-WIN_W/2,0.5,-WIN_H/2),
-    BackgroundColor3=T.Dark,
+-- ── Window ───────────────────────────────────────────
+local W,H = 390,490
+local Win = N("Frame",{
+    Name="Window",
+    Size=UDim2.new(0,W,0,H),
+    Position=UDim2.new(0.5,-W/2,0.5,-H/2),
+    BackgroundColor3=C.BG,
     BorderSizePixel=0,
     ClipsDescendants=true,
-    Name="Window",
-},ScreenGui)
-corner(Window,10)
-stroke(Window,T.Border,0.3,1)
+},SG)
+corner(Win,10)
+uistroke(Win,C.Border,0.4,1)
 
 -- ── Drag ─────────────────────────────────────────────
 do
-    local drag,startM,startP = false,nil,nil
-    Window.InputBegan:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 then
-            drag=true startM=inp.Position startP=Window.Position
+    local dragging,dmouse,dpos=false,nil,nil
+    Win.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1
+        or inp.UserInputType==Enum.UserInputType.Touch then
+            dragging=true dmouse=inp.Position dpos=Win.Position
         end
     end)
     UserInputService.InputChanged:Connect(function(inp)
-        if drag and inp.UserInputType==Enum.UserInputType.MouseMovement then
-            local d=inp.Position-startM
-            Window.Position=UDim2.new(
-                startP.X.Scale,startP.X.Offset+d.X,
-                startP.Y.Scale,startP.Y.Offset+d.Y)
+        if not dragging then return end
+        if inp.UserInputType==Enum.UserInputType.MouseMovement
+        or inp.UserInputType==Enum.UserInputType.Touch then
+            local d=inp.Position-dmouse
+            Win.Position=UDim2.new(dpos.X.Scale,dpos.X.Offset+d.X,
+                                   dpos.Y.Scale,dpos.Y.Offset+d.Y)
         end
     end)
     UserInputService.InputEnded:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end
+        if inp.UserInputType==Enum.UserInputType.MouseButton1
+        or inp.UserInputType==Enum.UserInputType.Touch then
+            dragging=false
+        end
     end)
 end
 
 -- ── Titlebar ─────────────────────────────────────────
-local Titlebar = new("Frame",{
-    Size=UDim2.new(1,0,0,46),
-    BackgroundColor3=T.Panel,
+local TB = N("Frame",{
+    Size=UDim2.new(1,0,0,50),
+    BackgroundColor3=C.Panel,
     BorderSizePixel=0,
-    Name="Titlebar",
-},Window)
-corner(Titlebar,10)
--- bottom corners square
-new("Frame",{
-    Size=UDim2.new(1,0,0,10),
-    Position=UDim2.new(0,0,1,-10),
-    BackgroundColor3=T.Panel,
+    ZIndex=2,
+},Win)
+corner(TB,10)
+N("Frame",{
+    Size=UDim2.new(1,0,0,12),
+    Position=UDim2.new(0,0,1,-12),
+    BackgroundColor3=C.Panel,
     BorderSizePixel=0,
-},Titlebar)
+    ZIndex=2,
+},TB)
 
-label(Titlebar,"🦅  Pegasus Hub",14,T.Text,Enum.TextXAlignment.Left).Position=UDim2.new(0,14,0,0)
-label(Titlebar,"Dead Rails",11,T.Sub,Enum.TextXAlignment.Left).Position=UDim2.new(0,14,0,22)
+N("TextLabel",{
+    Size=UDim2.new(1,-50,0,26),
+    Position=UDim2.new(0,14,0,6),
+    BackgroundTransparency=1,
+    Text="🦅  Pegasus Hub",
+    TextSize=14, Font=Enum.Font.GothamBold,
+    TextColor3=C.Text,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ZIndex=3,
+},TB)
+N("TextLabel",{
+    Size=UDim2.new(1,-50,0,18),
+    Position=UDim2.new(0,14,0,28),
+    BackgroundTransparency=1,
+    Text="Dead Rails  •  rexx script",
+    TextSize=10, Font=Enum.Font.Gotham,
+    TextColor3=C.Sub,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ZIndex=3,
+},TB)
 
--- Close button
-local CloseBtn = new("TextButton",{
-    Size=UDim2.new(0,26,0,26),
-    Position=UDim2.new(1,-36,0,10),
-    BackgroundColor3=T.Off,
-    Text="✕",TextSize=12,
-    TextColor3=T.Sub,
+-- Close
+local CloseB = N("TextButton",{
+    Size=UDim2.new(0,24,0,24),
+    Position=UDim2.new(1,-34,0,13),
+    BackgroundColor3=Color3.fromRGB(50,30,30),
+    Text="✕", TextSize=11,
+    TextColor3=Color3.fromRGB(220,100,100),
     Font=Enum.Font.GothamBold,
-    AutoButtonColor=false,
-    BorderSizePixel=0,
-},Titlebar)
-corner(CloseBtn,6)
-CloseBtn.MouseButton1Click:Connect(function()
-    tween(Window,0.2,{Size=UDim2.new(0,WIN_W,0,0)})
-    task.wait(0.22) ScreenGui:Destroy()
+    AutoButtonColor=false, BorderSizePixel=0, ZIndex=4,
+},TB)
+corner(CloseB,5)
+CloseB.MouseButton1Click:Connect(function()
+    tw(Win,0.18,{Size=UDim2.new(0,W,0,0),BackgroundTransparency=1})
+    task.wait(0.2) SG:Destroy()
 end)
 
 -- ── Tab bar ──────────────────────────────────────────
-local TabBar = new("Frame",{
-    Size=UDim2.new(1,0,0,36),
-    Position=UDim2.new(0,0,0,46),
-    BackgroundColor3=T.Panel,
+local TabBar = N("Frame",{
+    Size=UDim2.new(1,0,0,34),
+    Position=UDim2.new(0,0,0,50),
+    BackgroundColor3=C.Panel,
     BorderSizePixel=0,
-},Window)
-local TabLayout = new("UIListLayout",{
+    ZIndex=2,
+},Win)
+-- separator line
+N("Frame",{
+    Size=UDim2.new(1,0,0,1),
+    Position=UDim2.new(0,0,1,-1),
+    BackgroundColor3=C.Border,
+    BorderSizePixel=0,
+    ZIndex=3,
+},TabBar)
+
+N("UIListLayout",{
     FillDirection=Enum.FillDirection.Horizontal,
     SortOrder=Enum.SortOrder.LayoutOrder,
-    Padding=UDim.new(0,4),
+    Padding=UDim.new(0,2),
+    VerticalAlignment=Enum.VerticalAlignment.Center,
 },TabBar)
-new("UIPadding",{PaddingLeft=UDim.new(0,10),PaddingTop=UDim.new(0,6),PaddingBottom=UDim.new(0,6)},TabBar)
+N("UIPadding",{PaddingLeft=UDim.new(0,8),PaddingRight=UDim.new(0,8)},TabBar)
 
--- Content area
-local ContentArea = new("Frame",{
-    Size=UDim2.new(1,0,1,-82),
-    Position=UDim2.new(0,0,0,82),
+-- ── Content area ─────────────────────────────────────
+local ContentArea = N("Frame",{
+    Size=UDim2.new(1,0,1,-84),
+    Position=UDim2.new(0,0,0,84),
     BackgroundTransparency=1,
     ClipsDescendants=true,
-},Window)
+},Win)
 
--- ── Tab system ───────────────────────────────────────
-local tabs = {}
-local activeTab = nil
+-- ═══════════════════════════════════════════════════════
+--  TAB SYSTEM
+-- ═══════════════════════════════════════════════════════
+local tabList    = {}
+local activeTab  = nil
 
-local function createTab(name)
-    -- Tab button
-    local btn = new("TextButton",{
-        Size=UDim2.new(0,0,1,0),
+local function makeTab(name, icon)
+    local displayName = icon and (icon.."  "..name) or name
+
+    local btn = N("TextButton",{
+        Size=UDim2.new(0,0,1,-6),
         AutomaticSize=Enum.AutomaticSize.X,
-        BackgroundColor3=T.Off,
+        BackgroundColor3=C.BG,
         BackgroundTransparency=1,
-        Text=name, TextSize=12,
-        TextColor3=T.Sub,
+        Text=displayName, TextSize=11,
+        TextColor3=C.Sub,
         Font=Enum.Font.GothamBold,
         AutoButtonColor=false,
         BorderSizePixel=0,
-        LayoutOrder=#tabs+1,
+        ZIndex=3,
+        LayoutOrder=#tabList+1,
     },TabBar)
-    new("UIPadding",{PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)},btn)
+    N("UIPadding",{PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)},btn)
     corner(btn,6)
 
-    -- Content frame for this tab
-    local content = new("ScrollingFrame",{
+    -- underline indicator
+    local line = N("Frame",{
+        Size=UDim2.new(0.7,0,0,2),
+        Position=UDim2.new(0.15,0,1,-2),
+        BackgroundColor3=C.TglOn,
+        BorderSizePixel=0,
+        Visible=false,
+        ZIndex=4,
+    },btn)
+    corner(line,1)
+
+    local scroll = N("ScrollingFrame",{
         Size=UDim2.new(1,0,1,0),
         BackgroundTransparency=1,
         ScrollBarThickness=3,
-        ScrollBarImageColor3=T.Border,
+        ScrollBarImageColor3=C.Border,
         CanvasSize=UDim2.new(0,0,0,0),
         AutomaticCanvasSize=Enum.AutomaticSize.Y,
         Visible=false,
         BorderSizePixel=0,
+        ZIndex=2,
     },ContentArea)
-    new("UIListLayout",{
+    N("UIListLayout",{
         SortOrder=Enum.SortOrder.LayoutOrder,
-        Padding=UDim.new(0,6),
-    },content)
-    new("UIPadding",{
-        PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12),
-        PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10),
-    },content)
+        Padding=UDim.new(0,5),
+    },scroll)
+    N("UIPadding",{
+        PaddingLeft=UDim.new(0,10), PaddingRight=UDim.new(0,10),
+        PaddingTop=UDim.new(0,10),  PaddingBottom=UDim.new(0,14),
+    },scroll)
 
-    local tab = { btn=btn, content=content, name=name }
-    table.insert(tabs, tab)
+    local tab = {btn=btn,scroll=scroll,line=line}
+    table.insert(tabList, tab)
 
-    btn.MouseButton1Click:Connect(function()
+    local function activate()
         if activeTab then
-            activeTab.content.Visible = false
-            tween(activeTab.btn,0.12,{TextColor3=T.Sub, BackgroundTransparency=1})
+            activeTab.scroll.Visible=false
+            activeTab.line.Visible=false
+            tw(activeTab.btn,0.12,{TextColor3=C.Sub, BackgroundTransparency=1})
         end
-        activeTab = tab
-        content.Visible = true
-        tween(btn,0.12,{TextColor3=T.Text, BackgroundTransparency=0.6})
-    end)
-
-    -- Activate first tab automatically
-    if #tabs == 1 then
-        activeTab = tab
-        content.Visible = true
-        btn.BackgroundTransparency = 0.6
-        btn.TextColor3 = T.Text
+        activeTab      = tab
+        scroll.Visible = true
+        line.Visible   = true
+        tw(btn,0.12,{TextColor3=C.Text, BackgroundTransparency=0.75})
     end
 
-    return content
+    btn.MouseButton1Click:Connect(activate)
+    if #tabList == 1 then activate() end
+
+    return scroll
 end
 
--- ── Control widgets ──────────────────────────────────
-local function rowFrame(parent, order)
-    local f = new("Frame",{
-        Size=UDim2.new(1,0,0,38),
-        BackgroundColor3=T.Field,
+-- ═══════════════════════════════════════════════════════
+--  CONTROL WIDGETS
+-- ═══════════════════════════════════════════════════════
+local rowOrder = 0
+local function nextOrder() rowOrder+=1 return rowOrder end
+
+local function makeRow(parent, h)
+    local f = N("Frame",{
+        Size=UDim2.new(1,0,0,h or 38),
+        BackgroundColor3=C.Field,
         BorderSizePixel=0,
-        LayoutOrder=order or 1,
+        ZIndex=3,
+        LayoutOrder=nextOrder(),
     },parent)
-    corner(f,8)
-    stroke(f,T.Border,0.7,1)
+    corner(f,7)
+    uistroke(f,C.Border,0.65,1)
     return f
 end
 
-local function addToggle(parent, name, default, onChange, order)
-    local row = rowFrame(parent, order)
-    local lbl = new("TextLabel",{
-        Size=UDim2.new(1,-52,1,0),
+local function makeSectionLabel(parent, text)
+    N("TextLabel",{
+        Size=UDim2.new(1,0,0,16),
+        BackgroundTransparency=1,
+        Text=string.upper(text),
+        TextSize=9, Font=Enum.Font.GothamBold,
+        TextColor3=C.Sub,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        ZIndex=3,
+        LayoutOrder=nextOrder(),
+    },parent)
+end
+
+local function makeToggle(parent, name, default, onChange)
+    local row   = makeRow(parent)
+    local state = default or false
+
+    N("TextLabel",{
+        Size=UDim2.new(1,-58,1,0),
         Position=UDim2.new(0,12,0,0),
         BackgroundTransparency=1,
         Text=name, TextSize=12,
-        TextColor3=T.Text,
         Font=Enum.Font.GothamBold,
+        TextColor3=C.Text,
         TextXAlignment=Enum.TextXAlignment.Left,
+        ZIndex=4,
     },row)
 
-    -- Toggle pill
-    local pill = new("Frame",{
+    -- Pill
+    local pill = N("Frame",{
         Size=UDim2.new(0,38,0,20),
         Position=UDim2.new(1,-50,0.5,-10),
-        BackgroundColor3=default and T.Toggle_On or T.Off,
-        BorderSizePixel=0,
+        BackgroundColor3=state and C.TglOn or C.TglOff,
+        BorderSizePixel=0, ZIndex=4,
     },row)
     corner(pill,10)
-    local dot = new("Frame",{
+
+    local dot = N("Frame",{
         Size=UDim2.new(0,14,0,14),
-        Position=default and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7),
-        BackgroundColor3=T.White,
-        BorderSizePixel=0,
+        Position=state and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7),
+        BackgroundColor3=C.White,
+        BorderSizePixel=0, ZIndex=5,
     },pill)
     corner(dot,7)
 
-    local state = default or false
-    local btn = new("TextButton",{
+    local hitbox = N("TextButton",{
         Size=UDim2.new(1,0,1,0),
         BackgroundTransparency=1,
-        Text="",AutoButtonColor=false,
+        Text="",AutoButtonColor=false, ZIndex=6,
     },row)
-    btn.MouseButton1Click:Connect(function()
+
+    hitbox.MouseButton1Click:Connect(function()
         state = not state
-        tween(pill,0.15,{BackgroundColor3=state and T.Toggle_On or T.Off})
-        tween(dot,0.15,{Position=state and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)})
+        tw(pill,0.14,{BackgroundColor3=state and C.TglOn or C.TglOff})
+        tw(dot, 0.14,{Position=state and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)})
         onChange(state)
     end)
-
-    -- Hover
-    btn.MouseEnter:Connect(function() tween(row,0.1,{BackgroundColor3=T.Hover}) end)
-    btn.MouseLeave:Connect(function() tween(row,0.1,{BackgroundColor3=T.Field}) end)
-
-    return state
+    hitbox.MouseEnter:Connect(function() tw(row,0.1,{BackgroundColor3=C.Hover}) end)
+    hitbox.MouseLeave:Connect(function() tw(row,0.1,{BackgroundColor3=C.Field}) end)
 end
 
-local function addButton(parent, name, onClick, order)
-    local row = rowFrame(parent, order)
-    row.BackgroundColor3 = T.Panel
-    local lbl = new("TextLabel",{
+local function makeButton(parent, name, onClick)
+    local row = makeRow(parent)
+    row.BackgroundColor3 = C.Panel
+
+    N("TextLabel",{
         Size=UDim2.new(1,0,1,0),
         BackgroundTransparency=1,
         Text=name, TextSize=12,
-        TextColor3=T.Text,
         Font=Enum.Font.GothamBold,
+        TextColor3=C.Text,
         TextXAlignment=Enum.TextXAlignment.Center,
+        ZIndex=4,
     },row)
-    local btn = new("TextButton",{
+
+    local hitbox = N("TextButton",{
         Size=UDim2.new(1,0,1,0),
         BackgroundTransparency=1,
-        Text="",AutoButtonColor=false,
+        Text="",AutoButtonColor=false, ZIndex=5,
     },row)
-    btn.MouseButton1Click:Connect(onClick)
-    btn.MouseEnter:Connect(function() tween(row,0.1,{BackgroundColor3=T.Hover}) end)
-    btn.MouseLeave:Connect(function() tween(row,0.1,{BackgroundColor3=T.Panel}) end)
+    hitbox.MouseButton1Click:Connect(onClick)
+    hitbox.MouseEnter:Connect(function() tw(row,0.1,{BackgroundColor3=C.Hover}) end)
+    hitbox.MouseLeave:Connect(function() tw(row,0.1,{BackgroundColor3=C.Panel}) end)
 end
 
-local function addLabel(parent, text, order)
-    new("TextLabel",{
-        Size=UDim2.new(1,0,0,22),
+local function makeLabel(parent, text)
+    N("TextLabel",{
+        Size=UDim2.new(1,0,0,20),
         BackgroundTransparency=1,
         Text=text, TextSize=11,
-        TextColor3=T.Sub,
         Font=Enum.Font.Gotham,
+        TextColor3=C.Sub,
         TextXAlignment=Enum.TextXAlignment.Center,
         TextWrapped=true,
-        LayoutOrder=order or 1,
+        ZIndex=3,
+        LayoutOrder=nextOrder(),
     },parent)
 end
 
-local function addSection(parent, name, order)
-    new("TextLabel",{
-        Size=UDim2.new(1,0,0,18),
-        BackgroundTransparency=1,
-        Text=name, TextSize=10,
-        TextColor3=T.Sub,
-        Font=Enum.Font.GothamBold,
-        TextXAlignment=Enum.TextXAlignment.Left,
-        LayoutOrder=order or 1,
-    },parent)
-end
+-- ═══════════════════════════════════════════════════════
+--  BUILD TABS
+-- ═══════════════════════════════════════════════════════
 
--- ══════════════════════════════════════════════════════
---  TABS & CONTROLS
--- ══════════════════════════════════════════════════════
+-- ── MAIN ─────────────────────────────────────────────
+local mainScroll = makeTab("MAIN","⚔")
 
--- ── MAIN Tab ──────────────────────────────────────────
-local mainContent = createTab("MAIN")
+makeSectionLabel(mainScroll, "Currency")
+makeToggle(mainScroll,"Auto Bonds",false,function(s)
+    F.AutoBonds=s notify("Auto Bonds: "..(s and "ON" or "OFF"))
+end)
 
-addSection(mainContent,"CURRENCY",1)
-addToggle(mainContent,"Auto Bonds",false,function(s)
-    F.AutoBonds = s
-    notify("Auto Bonds: "..(s and "ON" or "OFF"))
-end,2)
+makeSectionLabel(mainScroll, "Items")
+makeToggle(mainScroll,"Bring All Item",false,function(s)
+    F.BringItems=s notify("Bring All Item: "..(s and "ON" or "OFF"))
+end)
 
-addSection(mainContent,"ITEMS",3)
-addToggle(mainContent,"Bring All Item",false,function(s)
-    F.BringItems = s
-    notify("Bring All Item: "..(s and "ON" or "OFF"))
-end,4)
+makeSectionLabel(mainScroll, "Game")
+makeButton(mainScroll,"▶  Auto Escape (WIN)",function()
+    F.AutoEscape=true notify("Auto Escape aktif!")
+end)
+makeButton(mainScroll,"🚂  Auto Drive (Toggle)",function()
+    F.AutoDrive=not F.AutoDrive
+    if F.AutoDrive then
+        startDrive()
+        notify("Auto Drive: ON")
+    else
+        if driveConn then driveConn:Disconnect() driveConn=nil end
+        notify("Auto Drive: OFF")
+    end
+end)
 
-addSection(mainContent,"GAME",5)
-addButton(mainContent,"Auto Escape (WIN)",function()
-    F.AutoEscape = true
-    notify("Auto Escape aktif!")
-end,6)
-
-addButton(mainContent,"Auto Drive (Toggle)",function()
-    F.AutoDrive = not F.AutoDrive
-    if F.AutoDrive then startDrive() end
-    if driveConn and not F.AutoDrive then driveConn:Disconnect() driveConn=nil end
-    notify("Auto Drive: "..(F.AutoDrive and "ON" or "OFF"))
-end,7)
-
-addSection(mainContent,"MOVEMENT",8)
-addToggle(mainContent,"Speed Boost  [WASD]",false,function(s)
-    F.SpeedBoost = s
-    applySpeed()
-    notify("Speed Boost: "..(s and "ON" or "OFF"))
-end,9)
-
-addToggle(mainContent,"Fly  [WASD+Space/Ctrl]",false,function(s)
-    F.Fly = s
+makeSectionLabel(mainScroll, "Movement")
+makeToggle(mainScroll,"Speed Boost  [WASD]",false,function(s)
+    F.SpeedBoost=s applySpeed() notify("Speed Boost: "..(s and "ON" or "OFF"))
+end)
+makeToggle(mainScroll,"Fly  [WASD + Space/Ctrl]",false,function(s)
+    F.Fly=s
     if s then startFly() else stopFly() end
     notify("Fly: "..(s and "ON" or "OFF"))
-end,10)
+end)
 
--- ── ESP Tab ───────────────────────────────────────────
-local espContent = createTab("ESP")
+-- ── ESP ───────────────────────────────────────────────
+rowOrder = 0
+local espScroll = makeTab("ESP","👁")
 
-addSection(espContent,"BOX ESP (MERAH)",1)
-addToggle(espContent,"ESP Bonds",false,function(s)
-    F.ESPBonds = s
-    notify("ESP Bonds: "..(s and "ON" or "OFF"))
-end,2)
-addToggle(espContent,"ESP Zombie",false,function(s)
-    F.ESPZombie = s
-    notify("ESP Zombie: "..(s and "ON" or "OFF"))
-end,3)
-addToggle(espContent,"ESP Werewolf",false,function(s)
-    F.ESPWerewolf = s
-    notify("ESP Werewolf: "..(s and "ON" or "OFF"))
-end,4)
-addToggle(espContent,"ESP Cowboy",false,function(s)
-    F.ESPCowboy = s
-    notify("ESP Cowboy: "..(s and "ON" or "OFF"))
-end,5)
+makeSectionLabel(espScroll, "Box ESP — Merah")
+makeToggle(espScroll,"ESP Bonds",false,function(s)
+    F.ESPBonds=s notify("ESP Bonds: "..(s and "ON" or "OFF"))
+end)
+makeToggle(espScroll,"ESP Zombie",false,function(s)
+    F.ESPZombie=s notify("ESP Zombie: "..(s and "ON" or "OFF"))
+end)
+makeToggle(espScroll,"ESP Werewolf",false,function(s)
+    F.ESPWerewolf=s notify("ESP Werewolf: "..(s and "ON" or "OFF"))
+end)
+makeToggle(espScroll,"ESP Cowboy",false,function(s)
+    F.ESPCowboy=s notify("ESP Cowboy: "..(s and "ON" or "OFF"))
+end)
 
--- ── DEVELOPER Tab ─────────────────────────────────────
-local devContent = createTab("DEV")
+-- ── DEVELOPER ────────────────────────────────────────
+rowOrder = 0
+local devScroll = makeTab("DEV","👤")
 
-addLabel(devContent,"hello guys",1)
-addLabel(devContent,"My name is rexx",2)
-addLabel(devContent,"And me the developer this script",3)
-addLabel(devContent,"Join my discord server to get",4)
-addLabel(devContent,"new script & Information",5)
+-- spacer atas
+N("Frame",{Size=UDim2.new(1,0,0,8),BackgroundTransparency=1,LayoutOrder=nextOrder()},devScroll)
 
--- Discord button oval miring
-local discordRow = new("Frame",{
-    Size=UDim2.new(1,0,0,46),
+makeLabel(devScroll, "hello guys")
+makeLabel(devScroll, "My name is rexx")
+makeLabel(devScroll, "And me the developer this script")
+
+N("Frame",{Size=UDim2.new(1,0,0,8),BackgroundTransparency=1,LayoutOrder=nextOrder()},devScroll)
+makeLabel(devScroll, "Join my discord server to get")
+makeLabel(devScroll, "new script & Information")
+N("Frame",{Size=UDim2.new(1,0,0,10),BackgroundTransparency=1,LayoutOrder=nextOrder()},devScroll)
+
+-- Discord button — oval, miring
+local discHolder = N("Frame",{
+    Size=UDim2.new(1,0,0,52),
     BackgroundTransparency=1,
-    LayoutOrder=6,
-},devContent)
-local discordBtn = new("TextButton",{
-    Size=UDim2.new(0,220,0,36),
-    Position=UDim2.new(0.5,-110,0.5,-18),
-    BackgroundColor3=Color3.fromRGB(88,101,242),
+    LayoutOrder=nextOrder(),
+},devScroll)
+
+local discBtn = N("TextButton",{
+    Size=UDim2.new(0,220,0,38),
+    Position=UDim2.new(0.5,-110,0.5,-19),
+    BackgroundColor3=C.Discord,
     Text="⟣  Join Discord  ⟢",
-    TextSize=13,
-    TextColor3=Color3.fromRGB(255,255,255),
-    Font=Enum.Font.GothamBold,
+    TextSize=13, Font=Enum.Font.GothamBold,
+    TextColor3=C.White,
     AutoButtonColor=false,
     BorderSizePixel=0,
-    Rotation=-3,  -- miring sedikit
-},discordRow)
-corner(discordBtn,18)  -- oval
-stroke(discordBtn,Color3.fromRGB(100,115,255),0.4,1)
+    Rotation=-3,
+    ZIndex=4,
+},discHolder)
+corner(discBtn,20)
+uistroke(discBtn,Color3.fromRGB(120,130,255),0.3,1)
 
-discordBtn.MouseButton1Click:Connect(function()
+discBtn.MouseButton1Click:Connect(function()
     local url = "https://discord.gg/kjVyy4vxR5"
     if setclipboard then
         setclipboard(url)
-        notify("Discord link disalin!",3)
     elseif syn and syn.clipboard then
         syn.clipboard.set(url)
-        notify("Discord link disalin!",3)
     end
+    notify("Discord link disalin ke clipboard!",3)
 end)
-discordBtn.MouseEnter:Connect(function()
-    tween(discordBtn,0.12,{BackgroundColor3=Color3.fromRGB(100,115,255)})
-end)
-discordBtn.MouseLeave:Connect(function()
-    tween(discordBtn,0.12,{BackgroundColor3=Color3.fromRGB(88,101,242)})
-end)
+discBtn.MouseEnter:Connect(function() tw(discBtn,0.12,{BackgroundColor3=C.DiscHov}) end)
+discBtn.MouseLeave:Connect(function() tw(discBtn,0.12,{BackgroundColor3=C.Discord}) end)
 
--- ── Hotkey: INSERT = toggle visibility ───────────────
+-- ── Hotkey INSERT = hide/show ─────────────────────────
 UserInputService.InputBegan:Connect(function(inp, gpe)
     if gpe then return end
     if inp.KeyCode == Enum.KeyCode.Insert then
-        Window.Visible = not Window.Visible
+        Win.Visible = not Win.Visible
     end
 end)
 
 -- ── Open notify ──────────────────────────────────────
-notify("Pegasus Hub loaded! | Dead Rails",5)
+notify("Pegasus Hub loaded! | Dead Rails", 5)
